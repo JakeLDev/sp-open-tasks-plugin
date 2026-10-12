@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Tasks</title>
+<style>
+  :root {
+    --bg: #fff; --fg: #1a1a1a; --muted: #6b7280; --line: #e5e7eb; --soft: #f6f7f9;
+    --over: #dc2626; --over-bg: #fef2f2; --today: #b45309; --today-bg: #fffbeb; --link: #0f766e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1e; --fg: #e6e6e6; --muted: #9ca3af; --line: #333; --soft: #262626;
+      --over: #f87171; --over-bg: #2a1416; --today: #fbbf24; --today-bg: #2a2412; --link: #5eead4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px 16px 32px; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0; }
+  #counts, #updated { color: var(--muted); font-size: 12px; }
+  #q { flex: 1 1 180px; max-width: 320px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px;
+    background: var(--bg); color: inherit; font: inherit; }
+  button { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 4px;
+    padding: 3px 9px; cursor: pointer; }
+  button:hover { background: var(--soft); }
+  section { margin: 0 0 18px; }
+  h2 { font-size: 17px; color: var(--fg);
+    margin: 0 0 4px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  h2 .n { font-weight: 400; color: var(--muted); }
+  h2.due { color: var(--over); }
+  .task { border-bottom: 1px solid var(--line); padding: 6px 2px; }
+  .row { display: flex; align-items: baseline; gap: 8px; }
+  .twist { width: 22px; flex: none; padding: 0; border: 0; color: var(--muted); text-align: center; font-size: 13px; line-height: 1; }
+  .twist:hover { background: none; color: var(--fg); }
+  .spacer { width: 22px; flex: none; }
+  .title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .check { flex: none; margin: 0 2px 0 0; align-self: center; cursor: pointer; accent-color: var(--link); }
+  .check:disabled { cursor: not-allowed; opacity: .35; }
+  #toast { position: fixed; left: 16px; bottom: 16px; display: none; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: 6px; background: var(--fg); color: var(--bg); font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.35); max-width: calc(100% - 32px); }
+  #toast button { color: inherit; border-color: currentColor; }
+  .open { cursor: pointer; }
+  .open:hover { text-decoration: underline; }
+  .open:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 2px; }
+  .meta { flex: none; display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--muted); }
+  .badge { padding: 0 6px; border-radius: 8px; background: var(--soft); }
+  .badge.over { color: var(--over); background: var(--over-bg); }
+  .badge.today { color: var(--today); background: var(--today-bg); }
+  .parent { color: var(--muted); font-size: 12px; }
+  a.lnk { color: var(--link); text-decoration: none; font-size: 13px; padding: 1px 8px; border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--link) 45%, transparent); background: color-mix(in srgb, var(--link) 10%, transparent); }
+  a.lnk:hover { background: color-mix(in srgb, var(--link) 25%, transparent); }
+  .details { margin: 4px 0 2px 30px; }
+  .notes { white-space: pre-wrap; color: var(--muted); font-size: 12px; margin: 0 0 4px; overflow-wrap: anywhere; }
+  .sub { padding: 2px 0; }
+  .tabs { display: flex; }
+  .tabs button { border-radius: 0; }
+  .tabs button:first-child { border-radius: 4px 0 0 4px; }
+  .tabs button:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
+  .tabs button[aria-pressed="true"] { background: var(--soft); border-color: var(--link); color: var(--link); }
+  .pos { width: 26px; flex: none; text-align: right; color: var(--muted); font-size: 12px; cursor: grab; }
+  .mv { flex: none; padding: 0 4px; border: 0; color: var(--muted); font-size: 13px; line-height: 1; }
+  .mv:hover { background: none; color: var(--fg); }
+  .mv:disabled { visibility: hidden; }
+  .task[draggable="true"] { cursor: grab; }
+  .proj { font-size: 12px; color: var(--muted); margin-left: 6px; }
+  .empty, .error { padding: 24px 4px; text-align: center; color: var(--muted); }
+  .error { color: var(--over); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Open tasks</h1>
+    <div class="tabs" role="group" aria-label="View">
+      <button id="tab-project" type="button" aria-pressed="true">By project</button>
+      <button id="tab-order" type="button" aria-pressed="false">My order</button>
+    </div>
+    <span id="counts"></span>
+    <input id="q" type="search" placeholder="Filter by title or notes" aria-label="Filter tasks">
+    <button id="expand-all" type="button">Expand all</button>
+    <button id="collapse-all" type="button">Collapse all</button>
+    <button id="refresh" type="button">Refresh</button>
+    <span id="updated"></span>
+  </header>
+  <main id="out"></main>
+  <div id="toast" role="status"><span id="toast-text"></span><button id="toast-undo" type="button">Undo</button></div>
+<script>
+var REFRESH_MS = 5000;
+
+// ------------------------------------------------------------- pure helpers
+
+function localDay(d) {
+  var m = d.getMonth() + 1, day = d.getDate();
+  return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+}
+
+// "#3 Do thing" sorts by 3. Tasks without a leading #N keep their own order after the numbered ones.
+function stepOf(title) {
+  var m = /^#(\d+)\s/.exec(title || '');
+  return m ? parseInt(m[1], 10) : Infinity;
+}
+
+function formatMs(ms) {
+  var min = Math.round((ms || 0) / 60000);
+  if (!min) return '';
+  return min >= 60 ? Math.floor(min / 60) + 'h' + (min % 60 ? ' ' + (min % 60) + 'm' : '') : min + 'm';
+}
+
+function safeUrl(u) {
+  return typeof u === 'string' && /^https?:\/\//i.test(u) ? u : null;
+}
+
+function matches(query, task, subs) {
+  if (!query) return true;
+  var q = query.toLowerCase();
+  var hay = [task.title, task.notes].concat(subs.map(function (s) { return s.title; }));
+  return hay.some(function (t) { return t && String(t).toLowerCase().indexOf(q) !== -1; });
+}
+
+/**
+ * Turns SP's flat task list into what the pane shows:
+ *  - due:    open tasks (and subtasks) due today or earlier, oldest first
+ *  - groups: open top-level tasks per project, in project order, numbered steps first
+ * An open subtask whose parent is done or missing is shown as a top-level task so it is not lost.
+ */
+function buildModel(tasks, projects, query, today) {
+  var byId = {}, i;
+  for (i = 0; i < tasks.length; i++) byId[tasks[i].id] = tasks[i];
+  var open = tasks.filter(function (t) { return !t.isDone; });
+  var subsOf = {}, tops = [];
+  open.forEach(function (t) {
+    var parent = t.parentId ? byId[t.parentId] : null;
+    if (parent && !parent.isDone) (subsOf[t.parentId] = subsOf[t.parentId] || []).push(t);
+    else tops.push(t);
+  });
+
+  var order = tops.map(function (t, idx) { return { t: t, idx: idx }; });
+  order.sort(function (a, b) {
+    var d = stepOf(a.t.title) - stepOf(b.t.title);
+    return d === 0 || isNaN(d) ? a.idx - b.idx : d;
+  });
+
+  var projOrder = {}, names = {};
+  projects.forEach(function (p, idx) { projOrder[p.id] = idx; names[p.id] = p.title; });
+  var groupsById = {}, groups = [];
+  order.forEach(function (o) {
+    var subs = subsOf[o.t.id] || [];
+    if (!matches(query, o.t, subs)) return;
+    var pid = o.t.projectId || 'none';
+    if (!groupsById[pid]) {
+      groupsById[pid] = { id: pid, name: names[pid] || 'No project', items: [] };
+      groups.push(groupsById[pid]);
+    }
+    groupsById[pid].items.push({ task: o.t, subs: subs });
+  });
+  groups.sort(function (a, b) { return (projOrder[a.id] === undefined ? 1e9 : projOrder[a.id]) - (projOrder[b.id] === undefined ? 1e9 : projOrder[b.id]); });
+
+  var due = open.filter(function (t) {
+    return t.dueDay && t.dueDay <= today && matches(query, t, []);
+  }).sort(function (a, b) { return a.dueDay < b.dueDay ? -1 : a.dueDay > b.dueDay ? 1 : 0; })
+    .map(function (t) { return { task: t, parent: t.parentId ? byId[t.parentId] : null, blocked: !!(subsOf[t.id] && subsOf[t.id].length) }; });
+
+  var topCount = 0;
+  groups.forEach(function (g) { topCount += g.items.length; });
+  var subCount = 0;
+  groups.forEach(function (g) { g.items.forEach(function (it) { subCount += it.subs.length; }); });
+  return { due: due, groups: groups, topCount: topCount, subCount: subCount };
+}
+
+// "My order": every open top-level task in one list. Saved ids come first in saved order.
+// Tasks not in the saved order yet keep the by-project order after them.
+function orderedItems(groups, savedIds) {
+  var rank = {};
+  (savedIds || []).forEach(function (id, idx) { rank[id] = idx; });
+  var flat = [];
+  groups.forEach(function (g) { g.items.forEach(function (it) { flat.push({ task: it.task, subs: it.subs, project: g.name }); }); });
+  var withIdx = flat.map(function (it, idx) { return { it: it, idx: idx, r: it.task.id in rank ? rank[it.task.id] : Infinity }; });
+  withIdx.sort(function (a, b) { return a.r !== b.r ? (a.r < b.r ? -1 : 1) : a.idx - b.idx; });
+  return withIdx.map(function (w) { return w.it; });
+}
+
+function moveId(ids, id, targetId, after) {
+  var out = ids.filter(function (x) { return x !== id; });
+  var at = out.indexOf(targetId);
+  if (at === -1) return ids;
+  out.splice(after ? at + 1 : at, 0, id);
+  return out;
+}
+
+// ---------------------------------------------------------------- rendering
+// Task text comes from the user's data, so every value is set with textContent.
+
+var expanded = {};
+var collapsedProjects = {};
+var today = localDay(new Date());
+
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+// Clicking a title opens Super Productivity's task detail panel on the right (works for subtasks too).
+async function openTask(id) {
+  var status = document.getElementById('updated');
+  try {
+    if (typeof PluginAPI.selectTask !== 'function') throw new Error('this Super Productivity version cannot open the task panel');
+    await PluginAPI.selectTask(id);
+  } catch (e) {
+    status.textContent = 'Could not open task: ' + (e && e.message ? e.message : e);
+  }
+}
+
+// The plugin API cannot change the app's view. The pane frame is same-origin with the app, so a link
+// made in the app's own document can do it: the app navigates itself, which the frame's sandbox allows.
+function openProject(id) {
+  try {
+    var a = window.parent.document.createElement('a');
+    a.href = '#/project/' + encodeURIComponent(id) + '/tasks';
+    a.click();
+  } catch (e) {
+    document.getElementById('updated').textContent = 'Could not open project: ' + (e && e.message ? e.message : e);
+  }
+}
+
+function openable(node, onOpen) {
+  node.classList.add('open');
+  node.tabIndex = 0;
+  node.setAttribute('role', 'button');
+  node.addEventListener('click', onOpen);
+  node.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onOpen(); }
+  });
+  return node;
+}
+
+// Marking done uses the same fields as SP's own toggle. A task with open subtasks stays blocked,
+// so one click never completes more than one task. Undo sits in a toast for a few seconds.
+var toastTimer = null;
+
+function showToast(text, onUndo) {
+  var box = document.getElementById('toast');
+  document.getElementById('toast-text').textContent = text;
+  var undo = document.getElementById('toast-undo');
+  undo.hidden = !onUndo;
+  undo.onclick = function () { hideToast(); onUndo(); };
+  box.style.display = 'flex';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 8000);
+}
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  document.getElementById('toast').style.display = 'none';
+}
+
+async function setDone(task, done) {
+  try {
+    if (typeof PluginAPI.updateTask !== 'function') throw new Error('this Super Productivity version cannot update tasks');
+    await PluginAPI.updateTask(task.id, done ? { isDone: true, doneOn: Date.now() } : { isDone: false, doneOn: undefined });
+    if (done) showToast('Marked done: ' + task.title, function () { setDone(task, false); });
+    await load(true);
+  } catch (e) {
+    showToast('Could not update task: ' + (e && e.message ? e.message : e));
+    await load(true);
+  }
+}
+
+function checkbox(task, blocked) {
+  var box = el('input', 'check');
+  box.type = 'checkbox';
+  box.setAttribute('aria-label', 'Mark done: ' + task.title);
+  if (blocked) {
+    box.disabled = true;
+    box.title = 'Complete the subtasks first';
+  } else {
+    box.addEventListener('change', function () { box.disabled = true; setDone(task, true); });
+  }
+  return box;
+}
+
+function dueBadge(task) {
+  if (!task.dueDay) return null;
+  var cls = task.dueDay < today ? 'badge over' : task.dueDay === today ? 'badge today' : 'badge';
+  return el('span', cls, (task.dueDay < today ? 'overdue ' : task.dueDay === today ? 'today ' : '') + task.dueDay.slice(5));
+}
+
+function linksOf(task) {
+  var out = [];
+  (task.attachments || []).forEach(function (a) {
+    var url = a && a.type === 'LINK' ? safeUrl(a.path) : null;
+    if (!url) return;
+    var link = el('a', 'lnk', a.title || url);
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    out.push(link);
+  });
+  return out;
+}
+
+function metaOf(task) {
+  var meta = el('span', 'meta');
+  var b = dueBadge(task);
+  if (b) meta.appendChild(b);
+  var spent = formatMs(task.timeSpent), est = formatMs(task.timeEstimate);
+  if (spent || est) meta.appendChild(el('span', '', (spent || '0m') + (est ? ' / ' + est : '')));
+  linksOf(task).forEach(function (l) { meta.appendChild(l); });
+  return meta;
+}
+
+function renderSub(sub) {
+  var d = el('div', 'sub row');
+  d.appendChild(checkbox(sub, false));
+  d.appendChild(openable(el('span', 'title', sub.title), function () { openTask(sub.id); }));
+  d.appendChild(metaOf(sub));
+  return d;
+}
+
+function twist(isOpen, label, onToggle) {
+  var tw = el('button', 'twist', isOpen ? '▼' : '▶');
+  tw.type = 'button';
+  tw.setAttribute('aria-expanded', String(isOpen));
+  tw.setAttribute('aria-label', label);
+  tw.addEventListener('click', onToggle);
+  return tw;
+}
+
+function renderTask(item, rerender, lead) {
+  var task = item.task;
+  var hasMore = item.subs.length > 0 || !!(task.notes && task.notes.trim());
+  var wrap = el('div', 'task');
+  var row = el('div', 'row');
+  (lead || []).forEach(function (n) { row.appendChild(n); });
+  if (hasMore) {
+    row.appendChild(twist(!!expanded[task.id], 'Show details', function () { expanded[task.id] = !expanded[task.id]; rerender(); }));
+  } else {
+    row.appendChild(el('span', 'spacer'));
+  }
+  row.appendChild(checkbox(task, item.subs.length > 0));
+  var title = openable(el('span', 'title', task.title), function () { openTask(task.id); });
+  if (item.subs.length) title.appendChild(el('span', 'parent', '  ' + item.subs.length + ' subtask' + (item.subs.length === 1 ? '' : 's')));
+  if (item.project) title.appendChild(el('span', 'proj', item.project));
+  row.appendChild(title);
+  row.appendChild(metaOf(task));
+  wrap.appendChild(row);
+  if (hasMore && expanded[task.id]) {
+    var det = el('div', 'details');
+    if (task.notes && task.notes.trim()) det.appendChild(el('div', 'notes', task.notes.trim()));
+    item.subs.forEach(function (s) { det.appendChild(renderSub(s)); });
+    wrap.appendChild(det);
+  }
+  return wrap;
+}
+
+var view = 'project';
+var myOrder = [];
+var orderIds = [];
+var ORDER_KEY = 'my-order';
+var dragId = null;
+
+async function saveOrder() {
+  try {
+    if (typeof PluginAPI.persistDataSynced !== 'function') throw new Error('this Super Productivity version cannot save plugin data');
+    await PluginAPI.persistDataSynced(JSON.stringify({ ids: myOrder }), ORDER_KEY);
+  } catch (e) {
+    showToast('Could not save order: ' + (e && e.message ? e.message : e));
+  }
+}
+
+async function loadOrder() {
+  try {
+    if (typeof PluginAPI.loadSyncedData !== 'function') return;
+    var raw = await PluginAPI.loadSyncedData(ORDER_KEY);
+    var ids = raw ? JSON.parse(raw).ids : null;
+    if (Array.isArray(ids)) myOrder = ids.filter(function (x) { return typeof x === 'string'; });
+  } catch (e) {
+    showToast('Could not load saved order: ' + (e && e.message ? e.message : e));
+  }
+}
+
+// Saves only open tasks, so done tasks drop out of the order.
+function move(id, targetId, after) {
+  myOrder = moveId(orderIds, id, targetId, after);
+  render();
+  saveOrder();
+}
+
+function moveButton(label, text, targetId, after, id) {
+  var b = el('button', 'mv', text);
+  b.type = 'button';
+  b.setAttribute('aria-label', label);
+  if (!targetId) b.disabled = true;
+  else b.addEventListener('click', function () { move(id, targetId, after); });
+  return b;
+}
+
+function renderOrder(out, query) {
+  var all = orderedItems(buildModel(lastData.tasks, lastData.projects, '', today).groups, myOrder);
+  orderIds = all.map(function (it) { return it.task.id; });
+  var shown = all.filter(function (it) { return matches(query, it.task, it.subs); });
+  var sec = el('section');
+  var h = el('h2', '', 'My order ');
+  h.appendChild(el('span', 'n', '(' + shown.length + ')'));
+  sec.appendChild(h);
+  shown.forEach(function (it, i) {
+    var id = it.task.id;
+    var prev = shown[i - 1], next = shown[i + 1];
+    var wrap = renderTask(it, render, [
+      el('span', 'pos', (orderIds.indexOf(id) + 1) + '.'),
+      moveButton('Move up: ' + it.task.title, '↑', prev && prev.task.id, false, id),
+      moveButton('Move down: ' + it.task.title, '↓', next && next.task.id, true, id),
+    ]);
+    wrap.setAttribute('draggable', 'true');
+    wrap.addEventListener('dragstart', function (ev) { dragId = id; if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'; });
+    wrap.addEventListener('dragover', function (ev) { if (dragId && dragId !== id) { ev.preventDefault(); wrap.style.boxShadow = 'inset 0 2px 0 var(--link)'; } });
+    wrap.addEventListener('dragleave', function () { wrap.style.boxShadow = ''; });
+    wrap.addEventListener('drop', function (ev) {
+      ev.preventDefault();
+      wrap.style.boxShadow = '';
+      var from = dragId;
+      dragId = null;
+      if (from && from !== id) move(from, id, orderIds.indexOf(from) < orderIds.indexOf(id));
+    });
+    wrap.addEventListener('dragend', function () { dragId = null; });
+    sec.appendChild(wrap);
+  });
+  out.appendChild(sec);
+}
+
+function setView(v) {
+  view = v;
+  document.getElementById('tab-project').setAttribute('aria-pressed', String(v === 'project'));
+  document.getElementById('tab-order').setAttribute('aria-pressed', String(v === 'order'));
+  if (lastData) render();
+}
+
+var lastData = null;
+
+function render() {
+  var out = document.getElementById('out');
+  var query = document.getElementById('q').value.trim();
+  today = localDay(new Date());
+  out.textContent = '';
+  var model = buildModel(lastData.tasks, lastData.projects, query, today);
+  document.getElementById('counts').textContent =
+    model.topCount + ' task' + (model.topCount === 1 ? '' : 's') + ' · ' + model.subCount + ' subtask' + (model.subCount === 1 ? '' : 's');
+
+  if (!model.groups.length && !model.due.length) {
+    out.appendChild(el('div', 'empty', query ? 'No open tasks match "' + query + '".' : 'No open tasks.'));
+    return;
+  }
+  if (model.due.length) {
+    var s = el('section');
+    s.appendChild(el('h2', 'due', 'Due today or overdue (' + model.due.length + ')'));
+    model.due.forEach(function (d) {
+      var wrap = el('div', 'task');
+      var row = el('div', 'row');
+      row.appendChild(el('span', 'spacer'));
+      row.appendChild(checkbox(d.task, d.blocked));
+      var t = openable(el('span', 'title', d.task.title), function () { openTask(d.task.id); });
+      if (d.parent) t.appendChild(el('span', 'parent', '  in ' + d.parent.title));
+      row.appendChild(t);
+      row.appendChild(metaOf(d.task));
+      wrap.appendChild(row);
+      s.appendChild(wrap);
+    });
+    out.appendChild(s);
+  }
+  if (view === 'order') return renderOrder(out, query);
+  model.groups.forEach(function (g) {
+    var sec = el('section');
+    var shut = !!collapsedProjects[g.id];
+    var h = el('h2');
+    h.appendChild(twist(!shut, 'Show tasks in ' + g.name, function () { collapsedProjects[g.id] = !shut; render(); }));
+    h.appendChild(g.id === 'none' ? el('span', '', g.name) : openable(el('span', '', g.name), function () { openProject(g.id); }));
+    h.appendChild(el('span', 'n', ' (' + g.items.length + ')'));
+    sec.appendChild(h);
+    if (!shut) g.items.forEach(function (it) { sec.appendChild(renderTask(it, render)); });
+    out.appendChild(sec);
+  });
+}
+
+// ------------------------------------------------------------------- loading
+
+var lastKey = '';
+
+async function load(force) {
+  var out = document.getElementById('out');
+  try {
+    if (typeof PluginAPI === 'undefined' || typeof PluginAPI.getTasks !== 'function') {
+      throw new Error('Super Productivity did not give this pane the plugin API.');
+    }
+    var res = await Promise.all([PluginAPI.getTasks(), PluginAPI.getAllProjects()]);
+    var key = JSON.stringify(res);
+    if (!force && key === lastKey) return;
+    lastKey = key;
+    lastData = { tasks: res[0] || [], projects: res[1] || [] };
+    render();
+    document.getElementById('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    out.textContent = '';
+    out.appendChild(el('div', 'error', 'Could not load tasks: ' + (e && e.message ? e.message : e)));
+  }
+}
+
+document.getElementById('q').addEventListener('input', function () { if (lastData) render(); });
+document.getElementById('expand-all').addEventListener('click', function () {
+  if (!lastData) return;
+  lastData.tasks.forEach(function (t) { expanded[t.id] = true; });
+  collapsedProjects = {};
+  render();
+});
+document.getElementById('collapse-all').addEventListener('click', function () {
+  expanded = {};
+  if (lastData) render();
+});
+document.getElementById('tab-project').addEventListener('click', function () { setView('project'); });
+document.getElementById('tab-order').addEventListener('click', function () { setView('order'); });
+document.getElementById('refresh').addEventListener('click', function () { load(true); });
+window.addEventListener('focus', function () { load(false); });
+setInterval(function () { load(false); }, REFRESH_MS);
+loadOrder().then(function () { return load(true); });
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "sp-open-tasks-plugin",
+  "version": "1.6.0",
+  "private": true,
+  "description": "Super Productivity plugin pane that lists open tasks across projects",
+  "scripts": {
+    "test": "node --test test/pane.test.mjs"
+  }
+}
