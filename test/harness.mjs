@@ -19,7 +19,7 @@ class FakeEl {
   setAttribute(k, v) { this.attrs[k] = String(v); }
   appendChild(c) { this.children.push(c); return c; }
   addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }
-  fire(type, ev = {}) { for (const fn of this.listeners[type] || []) fn({ preventDefault() {}, ...ev }); }
+  fire(type, ev = {}) { for (const fn of this.listeners[type] || []) fn({ preventDefault() {}, stopPropagation() {}, ...ev }); }
   hasClass(c) { return this.className.split(/\s+/).includes(c); }
   find(pred, out = []) { if (pred(this)) out.push(this); this.children.forEach((c) => c.find(pred, out)); return out; }
 }
@@ -41,7 +41,7 @@ export async function loadPane({ tasks = [], projects = [], withSelectTask = tru
     getElementById: (id) => (els[id] = els[id] || new FakeEl(id)),
     createElement: (tag) => new FakeEl(tag),
   };
-  const calls = { updateTask: [], selectTask: [], persist: [] };
+  const calls = { updateTask: [], selectTask: [], persist: [], reorder: [] };
   const store = JSON.parse(JSON.stringify(tasks));
   const PluginAPI = {
     getTasks: async () => JSON.parse(JSON.stringify(store)),
@@ -50,6 +50,14 @@ export async function loadPane({ tasks = [], projects = [], withSelectTask = tru
       validateTaskUpdate(updates);
       calls.updateTask.push([id, updates]);
       Object.assign(store.find((t) => t.id === id), updates);
+    },
+    // Same check as Super Productivity: every id must already be a subtask of the parent.
+    reorderTasks: async (ids, contextId, contextType) => {
+      const parent = store.find((t) => t.id === contextId);
+      const bad = ids.filter((id) => !parent.subTaskIds.includes(id));
+      if (contextType !== 'task' || bad.length) throw new Error('Tasks ' + bad.join(', ') + ' are not subtasks of ' + contextId);
+      calls.reorder.push([ids, contextId, contextType]);
+      parent.subTaskIds = ids;
     },
     persistDataSynced: async (data, key) => { calls.persist.push([key, data]); synced[key] = data; },
     loadSyncedData: async (key) => synced[key] ?? null,

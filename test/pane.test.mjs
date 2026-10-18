@@ -237,3 +237,29 @@ test('the description can be cut to one line while the subtasks stay open', asyn
   els['expand-all'].fire('click');
   assert.ok(!notes().hasClass('short'));
 });
+
+test('subtasks show in the parent order, and drag or arrow keys reorder them without dropping done ones', async () => {
+  const tasks = [
+    task({ id: 'p', title: 'parent', subTaskIds: ['s3', 'done', 's1', 's2'] }),
+    task({ id: 's1', title: 'one', parentId: 'p' }),
+    task({ id: 's2', title: 'two', parentId: 'p' }),
+    task({ id: 's3', title: 'three', parentId: 'p' }),
+    task({ id: 'done', title: 'old', parentId: 'p', isDone: true }),
+  ];
+  const { ctx, root, calls, store, settle } = await loadPane({ tasks, projects });
+  ctx.expanded.p = true; ctx.render();
+  const subs = () => root.find((e) => e.hasClass('sub'));
+  const titles = () => subs().map((s) => s.find((e) => e.hasClass('title'))[0]._text);
+  assert.deepEqual(titles(), ['three', 'one', 'two']);
+
+  subs()[0].fire('dragstart');
+  subs()[2].fire('drop');
+  await settle();
+  assert.deepEqual(store[0].subTaskIds, ['done', 's1', 's2', 's3']);
+  assert.deepEqual(titles(), ['one', 'two', 'three']);
+
+  root.find((e) => e.attrs['aria-label'] === 'Reorder: three')[0].fire('keydown', { key: 'ArrowUp' });
+  await settle();
+  assert.deepEqual(store[0].subTaskIds, ['done', 's1', 's3', 's2']);
+  assert.strictEqual(calls.reorder.length, 2);
+});

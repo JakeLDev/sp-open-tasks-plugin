@@ -2,7 +2,7 @@
   "id": "open-tasks-pane",
   "name": "Open Tasks",
   "description": "Pane that lists all open tasks across every project. Lets you open a task and mark it done.",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "manifestVersion": 1,
   "minSupVersion": "14.0.0",
   "permissions": ["showIndexHtmlAsView"],

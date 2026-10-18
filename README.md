@@ -8,6 +8,7 @@ It lists all open tasks from every project on one screen, so you do not need to 
 - All open tasks, grouped by project, with a count for each project. Click a project name to open that project in Super Productivity. The arrow next to a project name hides or shows its tasks.
 - A "Due today or overdue" section at the top.
 - Two views. "By project" is the default. "My order" puts all open top-level tasks in one list that you set the order of. Drag a task, or use the up and down arrows. The order is saved with `persistDataSynced`, so it syncs like other Super Productivity data. A new task goes to the end of the list.
+- Subtasks show in the order Super Productivity keeps for them. Drag a subtask by its grip (⠿), or focus the grip and press the up or down arrow key, to change the order. The new order is saved in Super Productivity itself (`reorderTasks`), so the main app and agents see it too. Agents can use `sp subtasks` and `sp reorder` from the super-productivity skill, or the MCP `reorder_tasks` tool.
 - Tasks with a leading step number (`#1`, `#2`) are sorted by that number. Other tasks come after them.
 - Due date, time spent and estimate, and the links on each task (PRs, Jira tickets).
 - A filter box for titles, notes and subtask titles.
@@ -20,7 +21,7 @@ The pane refreshes every 5 seconds and when the window gets focus.
 ## Privacy and permissions
 
 - The plugin reads tasks and projects through the Super Productivity plugin API.
-- The only change it makes to tasks is marking a task done (`isDone` and `doneOn`), or undoing that. It also saves the "My order" list as plugin data. It asks for the `showIndexHtmlAsView` permission only. It has no Node access and no network code.
+- The only changes it makes to tasks are marking a task done (`isDone` and `doneOn`) or undoing that, and the order of subtasks in a parent (`subTaskIds`). It also saves the "My order" list as plugin data. It asks for the `showIndexHtmlAsView` permission only. It has no Node access and no network code.
 - Task text is shown as plain text. Links open only when they start with `http://` or `https://`.
 
 ## Install

@@ -60,6 +60,9 @@
   .notes { flex: 1 1 auto; min-width: 0; white-space: pre-wrap; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
   .notes.short { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sub { padding: 2px 0; }
+  .grip { flex: none; width: 14px; margin-left: -22px; padding: 0; border: 0; color: var(--muted); opacity: .5;
+    font-size: 12px; line-height: 1; cursor: grab; }
+  .grip:hover, .grip:focus-visible { background: none; opacity: 1; color: var(--fg); }
   .tabs { display: flex; }
   .tabs button { border-radius: 0; }
   .tabs button:first-child { border-radius: 4px 0 0 4px; }
@@ -139,6 +142,12 @@ function buildModel(tasks, projects, query, today) {
     var parent = t.parentId ? byId[t.parentId] : null;
     if (parent && !parent.isDone) (subsOf[t.parentId] = subsOf[t.parentId] || []).push(t);
     else tops.push(t);
+  });
+  // getTasks returns store order. The parent's subTaskIds holds the order the user set.
+  Object.keys(subsOf).forEach(function (pid) {
+    var ids = byId[pid].subTaskIds || [];
+    var rank = function (t) { var r = ids.indexOf(t.id); return r === -1 ? ids.length : r; };
+    subsOf[pid].sort(function (a, b) { return rank(a) - rank(b); });
   });
 
   var order = tops.map(function (t, idx) { return { t: t, idx: idx }; });
@@ -318,8 +327,62 @@ function metaOf(task) {
   return meta;
 }
 
-function renderSub(sub) {
+// reorderTasks replaces subTaskIds with the list it gets, so the full list is sent. That keeps
+// done subtasks, which the pane hides, in the parent.
+var subDrag = null;
+var focusSub = null;
+
+async function reorderSub(parent, id, targetId, after) {
+  try {
+    if (typeof PluginAPI.reorderTasks !== 'function') throw new Error('this Super Productivity version cannot reorder tasks');
+    await PluginAPI.reorderTasks(moveId(parent.subTaskIds || [], id, targetId, after), parent.id, 'task');
+  } catch (e) {
+    showToast('Could not reorder subtasks: ' + (e && e.message ? e.message : e));
+  }
+  await load(true);
+}
+
+function renderSub(sub, parent, prevId, nextId) {
   var d = el('div', 'sub row');
+  var ids = parent.subTaskIds || [];
+  var grip = el('button', 'grip', '⠿');
+  grip.type = 'button';
+  grip.title = 'Drag to reorder, or press the up or down arrow key';
+  grip.setAttribute('aria-label', 'Reorder: ' + sub.title);
+  grip.addEventListener('keydown', function (ev) {
+    var target = ev.key === 'ArrowUp' ? prevId : ev.key === 'ArrowDown' ? nextId : null;
+    if (!target) return;
+    ev.preventDefault();
+    focusSub = sub.id;
+    reorderSub(parent, sub.id, target, ev.key === 'ArrowDown');
+  });
+  if (focusSub === sub.id) { focusSub = null; setTimeout(function () { grip.focus(); }); }
+  d.appendChild(grip);
+  // Subtask drag events stop here, so they never reach a draggable task in "My order".
+  var canDrop = function () { return subDrag && subDrag.parent === parent.id && subDrag.id !== sub.id; };
+  d.setAttribute('draggable', 'true');
+  d.addEventListener('dragstart', function (ev) {
+    ev.stopPropagation();
+    subDrag = { parent: parent.id, id: sub.id };
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+  });
+  d.addEventListener('dragover', function (ev) {
+    if (!subDrag) return;
+    ev.stopPropagation();
+    if (!canDrop()) return;
+    ev.preventDefault();
+    d.style.boxShadow = ids.indexOf(subDrag.id) < ids.indexOf(sub.id) ? 'inset 0 -2px 0 var(--link)' : 'inset 0 2px 0 var(--link)';
+  });
+  d.addEventListener('dragleave', function () { d.style.boxShadow = ''; });
+  d.addEventListener('drop', function (ev) {
+    if (!subDrag) return;
+    ev.stopPropagation();
+    ev.preventDefault();
+    d.style.boxShadow = '';
+    if (canDrop()) reorderSub(parent, subDrag.id, sub.id, ids.indexOf(subDrag.id) < ids.indexOf(sub.id));
+    subDrag = null;
+  });
+  d.addEventListener('dragend', function () { subDrag = null; });
   d.appendChild(checkbox(sub, false));
   d.appendChild(openable(el('span', 'title', sub.title), function () { openTask(sub.id); }));
   d.appendChild(metaOf(sub));
@@ -362,7 +425,10 @@ function renderTask(item, rerender, lead) {
       nr.appendChild(el('div', short ? 'notes short' : 'notes', task.notes.trim()));
       det.appendChild(nr);
     }
-    item.subs.forEach(function (s) { det.appendChild(renderSub(s)); });
+    item.subs.forEach(function (s, i) {
+      var prev = item.subs[i - 1], next = item.subs[i + 1];
+      det.appendChild(renderSub(s, task, prev && prev.id, next && next.id));
+    });
     wrap.appendChild(det);
   }
   return wrap;
