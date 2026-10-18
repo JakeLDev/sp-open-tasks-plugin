@@ -12,7 +12,7 @@ It lists all open tasks from every project on one screen, so you do not need to 
 - Due date, time spent and estimate, and the links on each task (PRs, Jira tickets).
 - A filter box for titles, notes and subtask titles.
 - A checkbox on each task and subtask that marks it done. A toast with an Undo button shows for 8 seconds. A task with open subtasks has a disabled checkbox until its subtasks are done, so one click never completes more than one task.
-- An arrow on each task that shows its notes and subtasks. "Expand all" and "Collapse all" buttons do this for every task. "Expand all" also shows the tasks of collapsed projects.
+- An arrow on each task that shows its notes and subtasks. A small arrow next to the notes cuts them to one line and keeps the subtasks open. "Expand all" and "Collapse all" buttons do this for every task. "Expand all" also shows the tasks of collapsed projects.
 - Click a task or subtask title to open its details in Super Productivity's right-hand panel (needs a version with `PluginAPI.selectTask`).
 
 The pane refreshes every 5 seconds and when the window gets focus.

@@ -224,3 +224,16 @@ test('my order: a saved order is loaded on start, and drag and drop moves a task
   rows()[2].fire('drop');
   assert.deepEqual(JSON.parse(synced['my-order']).ids, ['a', 'b', 'c']);
 });
+
+test('the description can be cut to one line while the subtasks stay open', async () => {
+  const tasks = [task({ id: 'p', title: 'parent', notes: 'long text' }), task({ id: 's', title: 'kid', parentId: 'p' })];
+  const { ctx, root, els } = await loadPane({ tasks, projects });
+  ctx.expanded.p = true; ctx.render();
+  const notes = () => root.find((e) => e.hasClass('notes'))[0];
+  assert.ok(!notes().hasClass('short'));
+  root.find((e) => e.attrs['aria-label'] === 'Show full description')[0].fire('click');
+  assert.ok(notes().hasClass('short'));
+  assert.strictEqual(root.find((e) => e.hasClass('sub')).length, 1);
+  els['expand-all'].fire('click');
+  assert.ok(!notes().hasClass('short'));
+});
